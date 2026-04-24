@@ -237,11 +237,8 @@ class DeviceSession:
                 g_val,
                 ms2_val,
                 self.name,
-                self.address,
                 self.header.get("odr", 0),
                 self.header.get("capture_elapsed_us", 0),
-                self.header.get("read_failures", 0),
-                self.header.get("overflow_ram", 0),
             ])
         return rows, axis_name, fs_g
 
@@ -252,7 +249,7 @@ class DeviceSession:
             writer = csv.writer(f)
             writer.writerow([
                 "sample_idx", "time_s", f"{axis_name.lower()}_raw", f"{axis_name.lower()}_g", f"{axis_name.lower()}_m_s2",
-                "device_name", "ble_address", "odr_hz", "capture_elapsed_us", "read_failures", "overflow_ram",
+                "device_name", "odr_hz", "capture_elapsed_us",
             ])
             writer.writerows(rows)
         return csv_filename
