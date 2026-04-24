@@ -1,0 +1,4 @@
+bleak>=0.21.1
+matplotlib>=3.7.1
+# Note: tkinter is usually part of the Python standard library.
+# On some systems (e.g., Linux), it may require a separate package installation like 'python3-tk'.

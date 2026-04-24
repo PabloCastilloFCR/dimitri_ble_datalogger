@@ -1,6 +1,7 @@
 import asyncio
 import csv
 from datetime import datetime
+from pathlib import Path
 import matplotlib.pyplot as plt
 from bleak import BleakScanner, BleakClient
 
@@ -164,7 +165,9 @@ async def main():
         rows.append([idx, time_s, raw, g_val, ms2_val])
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    csv_filename = f"{axis_name.lower()}_capture_{timestamp}.csv"
+    output_dir = Path(__file__).parent.parent / "data"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    csv_filename = output_dir / f"{axis_name.lower()}_capture_{timestamp}.csv"
 
     with open(csv_filename, "w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
@@ -188,7 +191,7 @@ async def main():
         plt.grid(True)
         plt.tight_layout()
 
-        plot_filename = f"{axis_name.lower()}_capture_{timestamp}.png"
+        plot_filename = output_dir / f"{axis_name.lower()}_capture_{timestamp}.png"
         plt.savefig(plot_filename, dpi=150)
         plt.show()
 

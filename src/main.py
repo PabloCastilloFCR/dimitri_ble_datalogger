@@ -25,7 +25,7 @@ STATUS_UUID = "19B10002-E8F2-537E-4F6C-D104768A1214"
 DATA_UUID = "19B10003-E8F2-537E-4F6C-D104768A1214"
 DEVICE_NAME_PREFIX = "XIAO-IMU"
 
-OUTPUT_DIR = Path("ble_captures_multi")
+OUTPUT_DIR = Path(__file__).parent.parent / "data"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 
@@ -242,10 +242,16 @@ class DeviceSession:
             ])
         return rows, axis_name, fs_g
 
-    def save_csv(self, timestamp: str) -> Path:
+    def save_csv(self, timestamp: str, failure_mode: int = 0, excitation_freq: float = 0.0) -> Path:
         rows, axis_name, _ = self.build_rows()
-        csv_filename = OUTPUT_DIR / f"{self.name}_{axis_name.lower()}_{timestamp}.csv"
+        csv_filename = OUTPUT_DIR / f"{timestamp}_{self.name}_{axis_name.lower()}_mode{failure_mode}_{excitation_freq}Hz.csv"
         with open(csv_filename, "w", newline="", encoding="utf-8") as f:
+            f.write(f"# Device: {self.name}\n")
+            f.write(f"# Axis: {axis_name}\n")
+            f.write(f"# Failure Mode: {failure_mode}\n")
+            f.write(f"# Excitation Frequency: {excitation_freq} Hz\n")
+            f.write(f"# Timestamp: {datetime.now().isoformat()}\n")
+            
             writer = csv.writer(f)
             writer.writerow([
                 "sample_idx", "time_s", f"{axis_name.lower()}_raw", f"{axis_name.lower()}_g", f"{axis_name.lower()}_m_s2",
@@ -282,7 +288,7 @@ async def discover_target_devices(timeout: float = 10.0) -> List[DeviceSession]:
 
 
 class BleWorker:
-    def __init__(self, ui_callback: Callable[[str], None], finished_callback: Callable[[List[DeviceSession], str], None]):
+    def __init__(self, ui_callback: Callable[[str], None], finished_callback: Callable[[List[DeviceSession], str, int, float], None]):
         self.ui_callback = ui_callback
         self.finished_callback = finished_callback
         self._thread: Optional[threading.Thread] = None
@@ -292,7 +298,7 @@ class BleWorker:
     def busy(self) -> bool:
         return self._busy
 
-    def run_measurement(self, axis: str, range_g: int, duration_ms: int, delay_ms: int):
+    def run_measurement(self, axis: str, range_g: int, duration_ms: int, delay_ms: int, mode: int, freq: float):
         if self._busy:
             raise RuntimeError("Ya hay una medición en curso")
         self._busy = True
@@ -301,10 +307,10 @@ class BleWorker:
             try:
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                 sessions = asyncio.run(self._async_measure(axis, range_g, duration_ms, delay_ms))
-                self.finished_callback(sessions, timestamp)
+                self.finished_callback(sessions, timestamp, mode, freq)
             except Exception as e:
                 self.ui_callback(f"ERROR global: {e}")
-                self.finished_callback([], "")
+                self.finished_callback([], "", 0, 0.0)
             finally:
                 self._busy = False
 
@@ -380,11 +386,20 @@ class App:
         self.delay_var = tk.StringVar(value="3000")
         ttk.Entry(top, textvariable=self.delay_var, width=12).grid(row=1, column=3, padx=5, pady=5)
 
+        # --- ML Metadata ---
+        ttk.Label(top, text="Modo Falla (int)").grid(row=0, column=4, sticky="w", padx=5, pady=5)
+        self.mode_var = tk.StringVar(value="0")
+        ttk.Entry(top, textvariable=self.mode_var, width=10).grid(row=1, column=4, padx=5, pady=5)
+
+        ttk.Label(top, text="Frec. Excitación (Hz)").grid(row=0, column=5, sticky="w", padx=5, pady=5)
+        self.freq_var = tk.StringVar(value="0.0")
+        ttk.Entry(top, textvariable=self.freq_var, width=10).grid(row=1, column=5, padx=5, pady=5)
+
         self.measure_btn = ttk.Button(top, text="Tomar Medición", command=self.on_measure)
-        self.measure_btn.grid(row=1, column=4, padx=15, pady=5)
+        self.measure_btn.grid(row=1, column=6, padx=15, pady=5)
 
         self.status_var = tk.StringVar(value="Listo")
-        ttk.Label(top, textvariable=self.status_var).grid(row=1, column=5, sticky="w", padx=10)
+        ttk.Label(top, textvariable=self.status_var).grid(row=1, column=7, sticky="w", padx=10)
 
         mid = ttk.Panedwindow(self.root, orient=tk.HORIZONTAL)
         mid.pack(fill=tk.BOTH, expand=True, padx=10, pady=(0, 10))
@@ -416,8 +431,8 @@ class App:
     def threadsafe_log(self, msg: str):
         self.root.after(0, lambda: self._append_log(msg))
 
-    def threadsafe_finished(self, sessions: List[DeviceSession], timestamp: str):
-        self.root.after(0, lambda: self._on_measurement_finished(sessions, timestamp))
+    def threadsafe_finished(self, sessions: List[DeviceSession], timestamp: str, mode: int, freq: float):
+        self.root.after(0, lambda: self._on_measurement_finished(sessions, timestamp, mode, freq))
 
     def _append_log(self, msg: str):
         self.log_text.insert(tk.END, msg + "\n")
@@ -434,6 +449,8 @@ class App:
             range_g = int(self.range_var.get())
             duration_ms = int(self.duration_var.get())
             delay_ms = int(self.delay_var.get())
+            mode = int(self.mode_var.get())
+            freq = float(self.freq_var.get())
 
             if axis not in {"X", "Y", "Z"}:
                 raise ValueError("El eje debe ser X, Y o Z")
@@ -450,18 +467,18 @@ class App:
 
         self.measure_btn.config(state=tk.DISABLED)
         self.summary_var.set("Midiendo...")
-        self._append_log("=" * 60)
+        self._append_log("=" * 40)
         self._append_log(
-            f"Nueva medición | axis={axis} | range=±{range_g}g | duration={duration_ms} ms | delay={delay_ms} ms"
+            f"Nueva medición | axis={axis} | range=±{range_g}g | duration={duration_ms} ms | mode={mode} | freq={freq}Hz"
         )
 
         try:
-            self.worker.run_measurement(axis, range_g, duration_ms, delay_ms)
+            self.worker.run_measurement(axis, range_g, duration_ms, delay_ms, mode, freq)
         except Exception as e:
             self.measure_btn.config(state=tk.NORMAL)
             messagebox.showerror("Error", str(e))
 
-    def _on_measurement_finished(self, sessions: List[DeviceSession], timestamp: str):
+    def _on_measurement_finished(self, sessions: List[DeviceSession], timestamp: str, mode: int, freq: float):
         self.measure_btn.config(state=tk.NORMAL)
         self.latest_sessions = sessions
 
@@ -484,7 +501,7 @@ class App:
                 self.ax.plot(t, vals_ms2, label=s.name)
                 plotted += 1
 
-                csv_path = s.save_csv(timestamp)
+                csv_path = s.save_csv(timestamp, failure_mode=mode, excitation_freq=freq)
                 missing = s.missing_packets()
                 summary_parts.append(
                     f"{s.name}: N={len(rows)}, faltantes={len(missing)}, csv={csv_path.name}"

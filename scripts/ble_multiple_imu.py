@@ -35,7 +35,7 @@ SESSION_TIMEOUT_S = 180.0
 # =====================================================
 # Salida
 # =====================================================
-OUTPUT_DIR = Path("ble_captures_multi")
+OUTPUT_DIR = Path(__file__).parent.parent / "data"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 

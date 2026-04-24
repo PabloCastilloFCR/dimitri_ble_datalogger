@@ -1,6 +1,7 @@
 import asyncio
 import csv
 from datetime import datetime
+from pathlib import Path
 from bleak import BleakScanner, BleakClient
 
 DEVICE_NAME = "XIAO-IMU"
@@ -141,7 +142,9 @@ async def main():
         csv_rows.append([idx, time_s, x, y, z])
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    filename = f"imu_capture_{timestamp}.csv"
+    output_dir = Path(__file__).parent.parent / "data"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    filename = output_dir / f"imu_capture_{timestamp}.csv"
 
     with open(filename, "w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
