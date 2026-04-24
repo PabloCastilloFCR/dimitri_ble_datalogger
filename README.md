@@ -55,7 +55,9 @@ dimitri_ble_datalogger/
 ## Usage
 
 ### GUI Application (Recommended)
-The main GUI application allows you to discover up to 3 XIAO-IMU devices, configure capture parameters (axis, range, duration, delay), and visualize results in real-time.
+The main GUI application allows you to discover up to 3 XIAO-IMU devices, configure capture parameters (axis, range, duration, delay), and visualize results in real-time. 
+
+It includes **ML Campaign** fields to tag measurements with a Failure Mode (integer) and Excitation Frequency (Hz) directly from the interface.
 
 ```bash
 python src/main.py
@@ -64,12 +66,21 @@ python src/main.py
 ### CLI Scripts
 For automated or headless environments, you can use the scripts in the `scripts/` folder.
 
+- **ML Campaign Logger**: `python scripts/campaign_logger.py` (Automated, interactive collection)
 - **Multi-IMU CLI**: `python scripts/ble_multiple_imu.py`
 - **Single Axis (X) Optimized**: `python scripts/ble_only_x_logger.py`
 
 ## Data Format
-All captures are saved in the `data/` directory as CSV files with the following naming convention:
-`{DeviceName}_{Axis}_{Timestamp}.csv`
+All captures are saved in the `data/` directory as CSV files with a machine-parseable naming convention:
+`{Timestamp}_{DeviceName}_{Axis}_mode{FailureMode}_{Freq}Hz.csv`
+
+Each file includes a **Metadata Header** (as `#` comments) containing:
+- Device ID
+- Capture Axis
+- Failure Mode (integer)
+- Excitation Frequency (Hz)
+- Real-world timestamp
+
 
 **CSV Columns**:
 - `sample_idx`: Sequential index of the sample.
